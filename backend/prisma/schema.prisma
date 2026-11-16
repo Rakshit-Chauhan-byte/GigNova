@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  role        String   @default("STUDENT") // STUDENT, BUSINESS, ADMIN
+  isActive    Boolean  @default(true)
+  isSuspended Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  studentProfile  StudentProfile?
+  businessProfile BusinessProfile?
+  applicationsAsStudent Application[] @relation("StudentApplications")
+  reportsSubmitted      Report[]      @relation("ReporterUser")
+  reportsAgainst        Report[]      @relation("ReportedUser")
+}
+
+model StudentProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName          String
+  profilePicture    String?
+  phone             String?
+  college           String?
+  degree            String?
+  yearOfStudy       String?
+  skills            String   @default("[]") // JSON array stored as string
+  experience        String?
+  portfolioUrl      String?
+  linkedinUrl       String?
+  githubUrl         String?
+  availability      String?  // JSON: { days: [], hours: "..." }
+  preferredWorkType String?  // remote, onsite, hybrid
+  bio               String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model BusinessProfile {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName       String
+  description        String?
+  industry           String?
+  businessEmail      String?
+  contactPhone       String?
+  website            String?
+  location           String?
+  logoUrl            String?
+  verificationStatus String   @default("UNVERIFIED") // UNVERIFIED, PENDING, VERIFIED, REJECTED
+  verificationDocs   String?  // JSON: submitted documents info
+  verificationNote   String?  // Admin rejection reason
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  gigs                 Gig[]
+  verificationRequests VerificationRequest[]
+}
+
+model Gig {
+  id                   String   @id @default(uuid())
+  businessId           String
+  business             BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  title                String
+  description          String
+  category             String
+  requiredSkills       String   @default("[]") // JSON array
+  compensation         String
+  compensationType     String   @default("fixed") // fixed, hourly, monthly
+  workType             String   @default("remote") // remote, onsite, hybrid
+  location             String?
+  duration             String?
+  openings             Int      @default(1)
+  deadline             DateTime?
+  requiredAvailability String?
+  status               String   @default("ACTIVE") // ACTIVE, PAUSED, CLOSED, DELETED
+  isReported           Boolean  @default(false)
+  isSuspended          Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  applications Application[]
+  reports      Report[]      @relation("GigReports")
+}
+
+model Application {
+  id           String   @id @default(uuid())
+  gigId        String
+  gig          Gig      @relation(fields: [gigId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      User     @relation("StudentApplications", fields: [studentId], references: [id], onDelete: Cascade)
+  coverLetter  String?
+  status       String   @default("PENDING") // PENDING, UNDER_REVIEW, ACCEPTED, REJECTED, WITHDRAWN, COMPLETED
+  matchScore   Int      @default(0)
+  providerNote String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  smartMatchScore SmartMatchScore?
+
+  @@unique([gigId, studentId])
+}
+
+model SmartMatchScore {
+  id                     String   @id @default(uuid())
+  applicationId          String   @unique
+  application            Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  gigId                  String
+  studentId              String
+
+  skillScore             Int      @default(0)
+  experienceScore        Int      @default(0)
+  availabilityScore      Int      @default(0)
+  workModeScore          Int      @default(0)
+  assessmentScore        Int      @default(0)
+  totalScore             Int      @default(0)
+
+  matchedSkills          String   @default("[]")
+  missingSkills          String   @default("[]")
+  partiallyMatchedSkills String   @default("[]")
+  explanation            String   @default("{}")
+
+  isEligible             Boolean  @default(true)
+  eligibilityReasons     String   @default("[]")
+  isShortlisted          Boolean  @default(false)
+
+  calculatedAt           DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([gigId])
+  @@index([studentId])
+}
+
+model VerificationRequest {
+  id             String   @id @default(uuid())
+  businessId     String
+  business       BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  documents      String?  // JSON: document info
+  taxId          String?
+  registrationNo String?
+  additionalInfo String?
+  status         String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  adminNote      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Report {
+  id             String   @id @default(uuid())
+  reporterId     String
+  reporter       User     @relation("ReporterUser", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUserId String?
+  reportedUser   User?    @relation("ReportedUser", fields: [reportedUserId], references: [id])
+  reportedGigId  String?
+  reportedGig    Gig?     @relation("GigReports", fields: [reportedGigId], references: [id])
+  reason         String
+  description    String?
+  status         String   @default("PENDING") // PENDING, REVIEWED, RESOLVED, DISMISSED
+  adminNote      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
